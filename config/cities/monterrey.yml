@@ -1,0 +1,66 @@
+name: monterrey
+label: Zona Metropolitana de Monterrey
+country: MX
+
+# west, south, east, north in EPSG:4326
+bbox: [-100.62, 25.42, -99.94, 25.98]
+
+# Metric CRS used for all distance work. Leave null to let the pipeline
+# estimate the local UTM zone automatically, which is what makes this
+# config portable to any city.
+crs_metric: null
+
+inegi:
+  state_code: "19"
+  # Municipios of the ZMM. Used to clip the block face layer and to
+  # aggregate results. Codes are INEGI CVE_MUN within state 19.
+  municipality_codes:
+    ["006", "009", "010", "012", "018", "019", "021", "026", "031", "039", "045", "046", "047", "048"]
+
+mapillary:
+  zoom: 14
+  # Ignore imagery older than this. Sidewalks change, and mixing a 2015
+  # image with a 2025 one produces disagreement that looks like model error.
+  min_year: 2018
+
+# ---------------------------------------------------------------------------
+# CAMERA GEOMETRY. Every metric width in this project depends on these two
+# numbers. Change them here and rerun `measure`, nothing else needs touching.
+#
+# height_m: height of the camera above the road surface. A 10 percent error
+#   here is a 10 percent error in every width in the project, so this is the
+#   single most important parameter in the pipeline. See the calibration note
+#   below for where the current value comes from.
+#
+# pitch_deg: downward tilt of the optical axis. Zero means the axis is
+#   horizontal. Positive tilts the camera down.
+# CALIBRATED from the imagery itself, not assumed.
+#
+# Method: lane markings are projected to the ground and the spacing between
+# adjacent ones is measured. A marked lane in Mexican urban design is 3.2 to
+# 3.5 m regardless of how many lanes a road has, which makes it a tighter
+# standard than carriageway width, and unlike carriageway width it carries no
+# trimming bias (verified against a synthetic scene: it reads 3.303 when the
+# truth is 3.30).
+#
+# Result: at an assumed 1.45 m, 620 images with lane markings gave a median
+# spacing of 3.38 m (p25 2.61, p75 4.39), implying a true height of 1.41 m.
+# Setting 1.41 reproduces 3.29 and implies 1.41 again, so this is a fixed
+# point rather than one step of an iteration.
+#
+# Replace with Kaart's own figure the moment they give you one. Kaart used
+# BlackVue DR900M dashcams on vehicle windscreens; 1.41 m is consistent with
+# an SUV or pickup rather than a sedan.
+camera:
+  height_m: 1.41         # CALIBRATED, lane marking spacing, converged
+  pitch_deg: 0.0         # ASSUMED, not yet tested
+# ---------------------------------------------------------------------------
+
+osm:
+  network_type: drive
+
+# Coarse road hierarchy. Everything not listed falls into "other".
+tiers:
+  arterial: [motorway, motorway_link, trunk, trunk_link, primary, primary_link, secondary, secondary_link]
+  collector: [tertiary, tertiary_link, unclassified]
+  local: [residential, living_street, pedestrian]

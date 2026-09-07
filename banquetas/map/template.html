@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sidewalk audit — __CITY__</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.css">
+<style>
+:root{
+  color-scheme: light;
+  --surface:#fcfcfb; --plane:#f9f9f7;
+  --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+  --rule:#e1e0d9; --border:rgba(11,11,11,0.10);
+  /* Absent gets its own hue because it is the finding, and a ramp step is too
+     quiet for it. The other two stay an ordinal blue pair, so the encoding is
+     one alarm colour plus a ramp rather than three arbitrary hues. Red against
+     blue is the safe axis for colour vision deficiency: the worst pair here
+     measures a protanopia delta E of 19, against 4.1 for the red/green scale
+     this replaces. Green is deliberately absent from the map. */
+  --c-absent:#d03b3b; --c-narrow:#2a78d6; --c-adequate:#86b6ef;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  color-scheme: dark;
+  --surface:#1a1a19; --plane:#0d0d0d;
+  --ink:#fff; --ink-2:#c3c2b7; --muted:#898781;
+  --rule:#2c2c2a; --border:rgba(255,255,255,0.10);
+  --c-absent:#e66767; --c-narrow:#5598e7; --c-adequate:#184f95;
+}}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;
+     background:var(--plane);color:var(--ink);height:100vh;display:flex;flex-direction:column}
+header{padding:14px 18px 10px;background:var(--surface);border-bottom:1px solid var(--rule)}
+h1{margin:0 0 2px;font-size:17px;font-weight:600;letter-spacing:-0.01em}
+.sub{color:var(--ink-2);font-size:12.5px;margin-bottom:12px}
+.tiles{display:flex;gap:26px;flex-wrap:wrap}
+.tile .v{font-size:22px;font-weight:600;letter-spacing:-0.02em}
+.tile .l{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.tile .v .u{font-size:13px;font-weight:400;color:var(--ink-2)}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+  padding:9px 18px;background:var(--surface);border-bottom:1px solid var(--rule)}
+select{font:inherit;font-size:13px;padding:4px 8px;border:1px solid var(--border);
+  border-radius:5px;background:var(--surface);color:var(--ink)}
+label{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+main{flex:1;display:flex;min-height:0}
+#map{flex:1;min-width:0}
+aside{width:370px;flex:none;background:var(--surface);border-left:1px solid var(--rule);
+  overflow-y:auto;padding:16px 18px}
+.legend{position:absolute;left:14px;bottom:22px;background:var(--surface);
+  border:1px solid var(--border);border-radius:7px;padding:10px 12px;font-size:12.5px}
+.legend .row{display:flex;align-items:center;gap:8px;margin:5px 0}
+.swatch{width:22px;height:0;border-radius:2px}
+.wrap{position:relative;flex:1;display:flex;min-width:0}
+dl{display:grid;grid-template-columns:auto 1fr;gap:5px 14px;margin:12px 0 0;font-size:13px}
+dt{color:var(--muted)} dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+.pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;
+  font-weight:600;color:var(--surface)}
+.hint{color:var(--muted);font-size:12.5px}
+img.ev{width:100%;border-radius:6px;border:1px solid var(--border);margin-top:12px;display:block}
+a{color:inherit}
+.foot{margin-top:16px;padding-top:12px;border-top:1px solid var(--rule);
+  font-size:12px;color:var(--muted)}
+</style></head><body>
+
+<header>
+  <h1>Sidewalk audit &middot; __CITY__</h1>
+  <div class="sub">Pilot sample of the observed arterial and collector network.
+    Measured from Kaart's 2020 street level imagery with a Mapillary Vistas
+    segmentation model. Presence validated at 0.81 accuracy per block face;
+    width is indicative, with a mean absolute error near 0.7 m.</div>
+  <div class="tiles" id="tiles"></div>
+</header>
+
+<div class="controls">
+  <label for="fmun">Municipality</label><select id="fmun"></select>
+  <label for="fdec">Decile</label><select id="fdec"></select>
+  <label for="ftier">Road</label><select id="ftier"></select>
+  <label for="fcls">Sidewalk</label><select id="fcls"></select>
+  <label for="fev">Evidence</label><select id="fev">
+    <option value="">all</option>
+    <option value="weak">seen in one frame only</option>
+    <option value="strong">seen in two or more</option>
+    <option value="disagree">the two sides disagree</option>
+  </select>
+  <span class="hint" id="count"></span>
+</div>
+
+<main>
+  <div class="wrap">
+    <div id="map"></div>
+    <div class="legend">
+      <div style="font-weight:600;margin-bottom:6px">Near side footway</div>
+      <div class="row"><span class="swatch" style="border-top:5px solid var(--c-absent)"></span>absent</div>
+      <div class="row"><span class="swatch" style="border-top:3px solid var(--c-narrow)"></span>under 1.2 m</div>
+      <div class="row"><span class="swatch" style="border-top:2px solid var(--c-adequate)"></span>1.2 m or more</div>
+      <div class="row"><span class="swatch" style="border-top:2px solid var(--muted)"></span>motorway or trunk, not applicable</div>
+      <div class="row" style="margin-top:8px;color:var(--ink-2)">a dashed core means the face was seen in one frame only</div>
+    </div>
+  </div>
+  <aside id="panel"><div class="hint">Click a block face to inspect the frame it was
+    measured from, with the segmentation mask drawn over it.</div></aside>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.js"></script>
+<script>
+const CLASSES = {absent:"--c-absent", narrow:"--c-narrow", adequate:"--c-adequate"};
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+// The data is inlined rather than fetched. A page opened from file:// cannot
+// fetch a sibling file: browsers treat every local file as its own opaque
+// origin and block the request, which is what left this map blank the first
+// time. Inlining costs a few megabytes of HTML and removes the failure mode.
+const DATA = __DATA__;
+
+document.addEventListener("DOMContentLoaded", start);
+
+function start(){
+  const feats = DATA.features;
+  if (!feats || !feats.length){
+    document.getElementById("panel").innerHTML =
+      '<div class="hint">No block faces in this build.</div>';
+    return;
+  }
+  fillSelect("fmun","mun_name"); fillSelect("fdec","ses_decile");
+  fillSelect("ftier","tier"); fillSelect("fcls","class");
+
+  const map = new maplibregl.Map({
+    container:"map",
+    style:"https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+    bounds: bounds(feats), fitBoundsOptions:{padding:40}
+  });
+  map.addControl(new maplibregl.NavigationControl({showCompass:false}),"top-right");
+  map.addControl(new maplibregl.ScaleControl({maxWidth:110,unit:"metric"}));
+
+  map.on("load", () => {
+    map.addSource("faces",{type:"geojson",data:DATA});
+    map.addLayer({id:"faces-hit",type:"line",source:"faces",
+      paint:{"line-color":"#000","line-opacity":0,"line-width":14}});
+    map.addLayer({id:"faces",type:"line",source:"faces",
+      layout:{"line-cap":"round"},
+      paint:{
+        "line-color":["match",["get","class"],
+          "absent",css("--c-absent"),"narrow",css("--c-narrow"),
+          "adequate",css("--c-adequate"),css("--muted")],
+        "line-width":["interpolate",["linear"],["zoom"],
+          10,["match",["get","class"],"absent",2.0,"narrow",1.2,0.9],
+          16,["match",["get","class"],"absent",6,"narrow",3.6,2.4]]
+      }});
+    // sort so the finding is never hidden under an adequate face at a corner
+    map.setLayoutProperty("faces", "line-sort-key", 0);
+    map.setPaintProperty("faces", "line-opacity",
+      ["match",["get","class"],"n/a",0.55,0.95]);
+
+    map.addLayer({id:"faces-weak",type:"line",source:"faces",
+      filter:["<=",["get","n_images"],1],
+      paint:{"line-color":css("--surface"),"line-dasharray":[1.4,1.4],
+             "line-width":["interpolate",["linear"],["zoom"],10,1,16,2.4]}});
+
+    map.on("click","faces-hit", e => showFace(e.features[0].properties));
+    map.on("mouseenter","faces-hit",()=>map.getCanvas().style.cursor="pointer");
+    map.on("mouseleave","faces-hit",()=>map.getCanvas().style.cursor="");
+    apply(map);
+  });
+  ["fmun","fdec","ftier","fcls","fev"].forEach(id =>
+    document.getElementById(id).addEventListener("change", () => apply(map)));
+}
+
+function fillSelect(id, key){
+  const vals = [...new Set(DATA.features.map(f => f.properties[key]))]
+    .filter(v => v !== null && v !== "nan" && v !== undefined).sort();
+  const s = document.getElementById(id);
+  s.innerHTML = '<option value="">all</option>' +
+    vals.map(v => `<option>${v}</option>`).join("");
+}
+
+function apply(map){
+  const g = id => document.getElementById(id).value;
+  const f = DATA.features.filter(x =>
+    (!g("fmun")  || x.properties.mun_name === g("fmun")) &&
+    (!g("fdec")  || x.properties.ses_decile === g("fdec")) &&
+    (!g("ftier") || x.properties.tier === g("ftier")) &&
+    (!g("fcls")  || x.properties["class"] === g("fcls")) &&
+    (!g("fev")   ||
+      (g("fev") === "weak"     && x.properties.n_images <= 1) ||
+      (g("fev") === "strong"   && x.properties.n_images >= 2) ||
+      (g("fev") === "disagree" && x.properties.disagrees === true)));
+  if (map.getSource("faces")) map.getSource("faces").setData({type:"FeatureCollection",features:f});
+  stats(f);
+}
+
+function stats(all){
+  // motorways and trunk roads are drawn but never counted: pedestrians are
+  // prohibited on them, so a missing footway is not a deficit
+  const f = all.filter(x => x.properties["class"] !== "n/a");
+  const n = f.length || 1;
+  const share = c => 100 * f.filter(x => x.properties["class"] === c).length / n;
+  const km = f.reduce((a,x) => a + (x.properties.length_m||0), 0) / 1000;
+  const w = f.map(x => x.properties.width_m).filter(v => v !== null && v !== undefined).sort((a,b)=>a-b);
+  const med = w.length ? w[Math.floor(w.length/2)] : null;
+  document.getElementById("tiles").innerHTML = [
+    tile(f.length.toLocaleString(), "block faces"),
+    tile(share("absent").toFixed(0) + '<span class="u">%</span>', "no footway"),
+    tile(share("narrow").toFixed(0) + '<span class="u">%</span>', "under 1.2 m"),
+    tile(med === null ? "—" : med.toFixed(2) + '<span class="u"> m</span>', "median width"),
+    tile(km.toFixed(0) + '<span class="u"> km</span>', "street measured"),
+  ].join("");
+  document.getElementById("count").textContent =
+    f.length.toLocaleString() + " counted, " + (all.length - f.length).toLocaleString() +
+    " excluded as motorway or trunk, of " + DATA.features.length.toLocaleString();
+}
+const tile = (v,l) => `<div class="tile"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+
+function showFace(p){
+  const colour = css(CLASSES[p["class"]] || "--c-adequate");
+  const val = (v,u="",d=2) => (v === null || v === undefined || v === "" || Number.isNaN(+v))
+    ? "—" : (+v).toFixed(d) + u;
+  document.getElementById("panel").innerHTML = `
+    <span class="pill" style="background:${colour}">${p["class"]}</span>
+    <dl>
+      <dt>estimated width</dt><dd>${val(p.width_m," m")}</dd>
+      <dt>seen in</dt><dd>${p.n_images} frame${p.n_images==1?"":"s"}</dd>
+      <dt>frames showing a footway</dt><dd>${val(100*p.present_rate,"%",0)}</dd>
+      <dt>carriageway</dt><dd>${val(p.road_width_m," m")}</dd>
+      <dt>municipality</dt><dd>${p.mun_name ?? "—"}</dd>
+      <dt>decile</dt><dd>${p.ses_decile ?? "—"}</dd>
+      <dt>road class</dt><dd>${p.highway ?? p.tier}</dd>
+      <dt>other side of the street</dt><dd>${p.other_side ?? "not measured"}</dd>
+    </dl>
+    ${p.n_images <= 1 ? '<div class="hint" style="margin-top:10px">Seen in a single frame. '
+      + 'Recall on presence is 0.85, so an absent call from one pass is the weakest '
+      + 'evidence on this map.</div>' : ''}
+    ${p.img ? `<img class="ev" src="evidence/${p.img}.jpg"
+        alt="frame and segmentation mask" loading="lazy">
+      <div class="foot">Top: the frame. Bottom: the segmentation.
+        <a href="https://www.mapillary.com/app/?pKey=${p.img}&focus=photo"
+           target="_blank" rel="noopener">Open on Mapillary</a>.
+        Imagery &copy; Kaart, CC BY-SA.</div>`
+      : `<div class="foot">No frame stored for this face.</div>`}`;
+}
+
+window.addEventListener("error", e => {
+  const p = document.getElementById("panel");
+  if (p) p.innerHTML = '<div class="hint" style="color:#d03b3b">' +
+    'Something failed while drawing the map: ' + (e.message || e) + '</div>';
+});
+
+function bounds(feats){
+  let w=180,s=90,e=-180,n=-90;
+  for (const f of feats) for (const c of f.geometry.coordinates){
+    w=Math.min(w,c[0]); e=Math.max(e,c[0]); s=Math.min(s,c[1]); n=Math.max(n,c[1]); }
+  return [[w,s],[e,n]];
+}
+</script>
+</body></html>

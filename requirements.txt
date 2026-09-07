@@ -1,0 +1,18 @@
+geopandas>=1.0
+shapely>=2.0
+pyproj
+pandas>=2.0
+numpy
+requests
+pyyaml
+mercantile
+vt2geojson
+osmnx>=2.0        # optional, falls back to a direct Overpass query
+matplotlib        # stage 0 figures
+
+# stage 1b
+torch
+torchvision        # required by transformers image processors since v5
+scipy              # Mask2Former builds its loss module even at inference time
+transformers>=4.40
+pillow

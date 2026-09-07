@@ -1,0 +1,16 @@
+# secrets
+.env
+
+# heavy intermediates: imagery, masks, GeoPackages, the OSM and Mapillary caches
+data/
+cache/
+logs/
+
+# local environment
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# scratch
+Claude outputs/

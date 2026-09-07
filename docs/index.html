@@ -65,8 +65,10 @@ main{flex:1; display:flex; min-height:0}
 #map{position:absolute; inset:0}
 aside{
   width:352px; flex:none; background:var(--surface);
-  border-left:1px solid var(--rule); padding:18px 20px 24px; overflow-y:auto;
+  border-left:1px solid var(--rule); padding:18px 20px 24px;
+  overflow-y:auto; overflow-x:hidden; min-width:0;
 }
+aside img, aside figure{max-width:100%}
 
 /* ---------- rail bits ---------- */
 .eyebrow{
@@ -101,6 +103,25 @@ select{
 .maplibregl-canvas-container{position:absolute; top:0; left:0; width:100%; height:100%}
 .maplibregl-canvas{position:absolute; top:0; left:0}
 
+figure.ev{margin:14px 0 0}
+figure.ev img{
+  display:block; width:100%; max-width:100%; height:auto;
+  border-radius:5px; border:1px solid var(--rule); background:var(--panel);
+}
+figure.ev figcaption{
+  margin-top:7px; font-size:11.5px; line-height:1.45; color:var(--muted);
+}
+figure.ev.missing img{display:none}
+figure.ev.missing figcaption::before{
+  content:"The evidence frames are not deployed with this copy of the map. ";
+}
+.attrib{
+  position:absolute; left:14px; top:14px; z-index:2;
+  font-size:10.5px; line-height:1.4; color:var(--ink-2);
+  background:var(--surface); border:1px solid var(--rule); border-radius:4px;
+  padding:3px 8px; opacity:.94; max-width:min(52ch, calc(100% - 28px));
+}
+.attrib a{color:inherit}
 .zoom{
   position:absolute; top:14px; right:14px; display:flex; flex-direction:column;
   border:1px solid var(--hair); border-radius:5px; overflow:hidden;
